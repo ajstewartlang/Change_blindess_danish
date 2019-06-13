@@ -1,0 +1,238 @@
+---
+title: "paper_markdown"
+author: "Andrew Stewart"
+date: "17/04/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE, message=FALSE}
+library(lme4)
+library(lmerTest)
+library(fitdistrplus)
+library(emmeans)
+library(broom.mixed)
+library(tidyverse)
+```
+
+```{r, echo=FALSE, message=FALSE}
+data <- read_csv("Mariesdata2.csv")
+
+# tidy and wrangel the data to get it in the correct format
+tidy_data <- data %>% 
+          dplyr::select(Participant, Item, type, 
+          Focus, Cleft, YNResp.corr_raw, YNResp.rt_raw, changeResponse.corr_raw) %>%
+          filter(type != "filler") %>% 
+          dplyr::select(-type)
+
+colnames(tidy_data) <- c("Participant", "Item", "Focus", "Cleft", 
+                         "Response", "RT", "Correct_word")
+
+tidy_data[tidy_data$Focus == "y",]$Focus <- "Early"
+tidy_data[tidy_data$Focus == "n",]$Focus <- "Late"
+
+tidy_data$Focus <- as.factor(tidy_data$Focus)
+tidy_data$Cleft <- as.factor(tidy_data$Cleft)
+tidy_data$Participant <- as.factor(tidy_data$Participant)
+tidy_data$Item <- as.factor(tidy_data$Item)
+
+# set up contrasts for the two factors
+my_contrasts <- matrix(c(.5, -.5))
+
+contrasts(tidy_data$Focus) <- my_contrasts
+contrasts(tidy_data$Cleft) <- my_contrasts
+
+# convert RT variable to milliseconds
+tidy_data$RT <- tidy_data$RT * 1000
+```
+
+# Data analysis
+The paradigm makes it possible to test two different cognitive tasks related to attention in the same experiment. The first is change detection that is whether the participant notice any change at all between the first and second presentation. This task does not necessarily require a deep processing of the first presentation of the information being changed, only deep enough to make it possible to compare it to the second. What it does require however is monitoring of the information being changed in the second presentation. This monitoring is attention driven (cf. Sanford, 2002) and as our selective attention is more inclined to monitor foreground information than background; this task is sensitive to highlighting (visual as well as linguistic). The second task is reporting the changed word as it appeared in the first presentation. This task requires a deep processing of the first presentation for the participant to be able to retrieve exact information presented in the first information. This task is also attention driven as depth of processing of a piece of information is in part determined by our attention to it ( cf. (Anthony J Sanford, 2002). The two different tasks rely upon different cognitive abilities, monitoring and storage retrieval and it is, at least in theory possible that the tasks are not equally sensitive to different types of attention capturing devices. As a result, the two tasks are analyzed separately in our data.
+
+
+The data were analyzed using (generalized) linear mixed models and the lme4 package (Baayen, 2008; Tagliamonte & Baayen, 2012) in R version 3.5.3 (R Core Team, 2019). A number of separate measures were analyzed. First we analyzed the number of detected changes. Second the reaction times for all trial, trials where the changes were detected, and trials where the changes were detected and subsequenly also correctly identified. 
+
+(add to reference list:
+ R Core Team (2019). R: A language and environment for statistical computing. R Foundation for Statistical
+  Computing, Vienna, Austria. URL https://www.R-project.org/.
+)
+  
+Following Barr (2013), for each model we used the most complex random effects structure that converged. The exact specification is the random effects components in each analysis is detailed below. The Focus and Cleft factors as well as the interaction of the two was included in the model as fixed effects.  We used deviation contrast coding throughout.
+
+# Results
+
+Visualisation of all responses
+
+```{r, echo=FALSE, warning=FALSE}
+tidy_data %>% 
+  group_by(Participant, Focus, Cleft) %>%
+  mutate(Response = Response * 100) %>%
+  summarise(Response = mean(Response)) %>%
+  group_by(Focus, Cleft) %>% 
+  summarise(sd = sd(Response), Response = mean(Response)) %>%
+  ungroup() %>%
+  mutate(Cleft = recode_factor(Cleft, y = "Cleft Present", n = "Cleft Absent")) %>%
+  mutate(Focus = recode_factor(Focus, Early = "Early Focus", Late = "Late Focus")) %>%
+  ggplot(aes(x = Focus:Cleft, y = Response, fill = Focus:Cleft)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = Response - sd, ymax = Response + sd), colour="black", width=.1) +
+  guides(fill = FALSE) +
+  theme(axis.text.x=element_text(angle = 45, hjust = 1)) +
+  labs(x = NULL, y = "Change Detection Rate (%)", title = "All Responses")
+```
+<br>
+Visualisation of RT data for all responses
+
+```{r, echo=FALSE, warning=FALSE}
+tidy_data %>% 
+  mutate(Cleft = recode_factor(Cleft, y = "\nCleft Present", n = "\nCleft Absent")) %>%
+  mutate(Focus = recode_factor(Focus, Early = "Early Focus", Late = "Late Focus")) %>%
+  ggplot(aes(x = Focus:Cleft, y = RT, colour = Focus:Cleft)) +
+  geom_violin() +
+  geom_jitter(width = .2, alpha = .2) +
+  stat_summary(fun.data = "mean_cl_boot", colour = "black") +
+  guides(colour = FALSE) +
+  theme(axis.text.x=element_text(angle = 45, hjust = 1)) +
+  labs(x = NULL, y = "Reaction Time (ms.)", title = "RT for all Responses")
+```
+<br>
+Visualisation of RT data when people spot a change (regardless of whether they get it correct)
+
+```{r, echo=FALSE, warning=FALSE}
+tidy_data %>% 
+  filter(Response == "1") %>%
+  mutate(Cleft = recode_factor(Cleft, y = "\nCleft Present", n = "\nCleft Absent")) %>%
+  mutate(Focus = recode_factor(Focus, Early = "Early Focus", Late = "Late Focus")) %>%
+  ggplot(aes(x = Focus:Cleft, y = RT, colour = Focus:Cleft)) +
+  geom_violin() +
+  geom_jitter(width = .2, alpha = .2) +
+  stat_summary(fun.data = "mean_cl_boot", colour = "black") +
+  guides(colour = FALSE) +
+  theme(axis.text.x=element_text(angle = 45, hjust = 1)) +
+  labs(x = NULL, y = "Reaction Time (ms.)", title = "When a change is spotted (regardless of typed response)")
+```
+
+<br>
+Visualisation of RT data when people spot a change AND correctly identify it
+```{r, echo=FALSE, warning=FALSE}
+tidy_data %>% 
+  filter(Correct_word == "1") %>%
+  mutate(Cleft = recode_factor(Cleft, y = "\nCleft Present", n = "\nCleft Absent")) %>%
+  mutate(Focus = recode_factor(Focus, Early = "Early Focus", Late = "Late Focus")) %>%
+  ggplot(aes(x = Focus:Cleft, y = RT, colour = Focus:Cleft)) +
+  geom_violin() +
+  geom_jitter(width = .2, alpha = .2) +
+  stat_summary(fun.data = "mean_cl_boot", colour = "black") +
+  guides(colour = FALSE) +
+  theme(axis.text.x=element_text(angle = 45, hjust = 1)) +
+  labs(x = NULL, y = "Reaction Time (ms.)", title = "Correctly Identified Responses Only")
+```
+
+# Response Rate Analysis
+
+We conducted a generalised mixed model on the change detection rate with Focus and Cleft as fixed effects and participant and item as random intercepts as the fully maximal model would not converge. A summary of the model can be seen below. There was a main effect of Focus, but no effect of Cleft, and no interaction between Focus and Cleft.
+```{r, echo=FALSE}
+model <- glmer(Response ~ Focus * Cleft + (1 | Participant) +
+  (1 | Item), data = tidy_data, family = "binomial")
+```
+
+```{r}
+tidy(model)
+emmeans(model, pairwise ~ Focus, type = "response")
+```
+There is an effect of Focus position (such that detection in early focus conditions was at a rate of 98% and in late focus conditions at 94%). 
+
+We conducted a further generalised mixed model on the change detection rate for cases where people spotted a change (regardless of whether they correctly identified it). The fixed and random effects structures are identical to the previous model. A summary of the model can be seen below. There was a main effect of Focus, but no effect of Cleft, and no interaction between Focus and Cleft.
+
+```{r, echo=FALSE}
+corr_data <- tidy_data %>% filter(Response == "1")
+model <- glmer(Correct_word ~ Focus * Cleft + (1 | Participant) +
+                 (1 | Item), data = corr_data, family = "binomial")
+```
+
+```{r}
+tidy(model)
+emmeans(model, pairwise ~ Focus, type = "response")
+emmeans(model, pairwise ~ Cleft, type = "response")
+```
+
+
+There is an effect of Focus position (such that detection in early focus conditions was at a rate of 92% and in late focus conditions at 86%) as well as a main effect of cleft (such that detection in clefted constructions was at a rate of 87% and in non-clefted constructions at 92%), suggesting a backgrounding effect of clefts clauses rather than a highlighting effect of cleft constituents.
+
+# Reaction Time Analysis
+
+For the reaction time data, three mixed models were built. Due to non-normality of the residuals and convergence issues modeling under the gamma distribution, the mixed models were constructed with the dependent variable being log-transformed reaction times.  The first model included reaction times for detected as well as non-detected changes (i.e., all experimental trials regardless of response). This model involved random intercepts for Participants and Items and random slopes for Focus.
+
+A summary of the model can be seen below. As expected there was an effect of Focus but no effect of Cleft. Unlike the response models, the reaction time model did show an interaction between Focus and Cleft.
+
+```{r, echo=FALSE}
+all_data <- tidy_data %>% 
+  mutate(logRT = log(RT))
+
+model <- lmer(logRT ~ Focus * Cleft + (1 + Focus | Participant) +
+                (1 + Focus | Item), data = all_data)
+
+```
+
+To interpret the interaction we conducted a series of pairwise comparions using Boneferroni corrected p-values. WRITE SOMETHING HERE ABOUT WHAT THE PAIRWISE COMPARSIONS MEAN.
+```{r}
+tidy(model)
+emmeans(model, pairwise ~ Focus * Cleft, adjust = "bonferroni")
+```
+
+For the second reaction time model, we analysed the data for cases where people spotted a change regardless of wheether they correctly identified it.  This time the random effects structure included random intercepts for participants and items, and additive random slopes for our two fixed effects of Focus and Cleft. This again showed an effect of Focus,  no effect of Cleft and an interaction between Focus and Cleft.
+
+Mixed model on RT data when people spot a change
+```{r, echo=FALSE}
+correct_only_data <- corr_data %>% 
+  mutate(logRT = log(RT))
+
+model <- lmer(logRT ~ Focus * Cleft + (1 + Focus + Cleft | Participant) +
+                (1 + Focus + Cleft | Item), data = correct_only_data)
+
+```
+
+To interpret the interaction we conducted a series of pairwise comparions using Boneferroni corrected p-values. WRITE SOMETHING HERE ABOUT WHAT THE PAIRWISE COMPARSIONS MEAN.
+```{r}
+tidy(model)
+emmeans(model, pairwise ~ Focus * Cleft, adjust = "bonferroni")
+```
+
+Finally, for the third reaction time modelwe analysed the data for cases where people spotted a change AND correctly identified it.  This time the random effects structure included random intercepts for participants and items, and additive random slopes for our two fixed effects of Focus and Cleft for the Participant random effect term but a random slope of Focus for the Item random effect term. This again showed an effect of Focus, no effect of Cleft and an interaction between Focus and Cleft.
+
+Mixed model on RT data when people spot a change and correctly identify it
+```{r, echo=FALSE}
+correct_only_data <- corr_data %>% 
+  filter(Correct_word == "1") %>%
+  mutate(logRT = log(RT))
+
+model <- lmer(logRT ~ Focus * Cleft + (1 + Focus + Cleft | Participant) +
+                (1 + Focus | Item), data = correct_only_data)
+```
+
+To interpret the interaction we conducted a series of pairwise comparions using Boneferroni corrected p-values. WRITE SOMETHING HERE ABOUT WHAT THE PAIRWISE COMPARSIONS MEAN.
+```{r}
+tidy(model)
+emmeans(model, pairwise ~ Focus * Cleft, adjust = "bonferroni")
+```
+
+Speed vs. accuracy plots
+```{r}
+tidy_data$Response <- as.factor((tidy_data$Response))
+
+tidy_data %>% 
+  mutate(Cleft = recode_factor(Cleft, y = "\nCleft Present", n = "\nCleft Absent")) %>%
+  mutate(Focus = recode_factor(Focus, Early = "Early Focus", Late = "Late Focus")) %>%
+  mutate(Response = recode_factor(Response, "1" = "\nCorrect Response", "0" = "\nIncorrect Response")) %>%
+  ggplot(aes(x = Focus:Cleft:Response, y = RT, colour = Response)) +
+  geom_jitter(width = .2, alpha = .8, size = .5) +
+  guides(colour = FALSE) + 
+  scale_colour_hue(h = c(0, 360)) +
+  stat_summary(fun.data = "mean_cl_boot", colour = "black") +
+  theme(axis.text.x=element_text(angle = 45, hjust = 1)) +
+  labs(x = NULL, y = "Reaction Time", title = NULL)
+```
+
