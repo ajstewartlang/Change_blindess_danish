@@ -7,7 +7,7 @@ library(tidyverse)
 # read in the data
 data <- read_csv("Mariesdata2.csv")
 
-# tidy and wrangel the data to get it in the correct format
+# tidy and wrangle the data to get it in the correct format
 tidy_data <- data %>% 
           select(Participant, Item, type, 
           Focus, Cleft, YNResp.corr_raw, YNResp.rt_raw, changeResponse.corr_raw) %>%
