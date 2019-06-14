@@ -3,6 +3,7 @@ library(lmerTest)
 library(fitdistrplus)
 library(emmeans)
 library(tidyverse)
+library(Hmisc)
 
 data <- read_csv("Mariesdata2.csv")
 
