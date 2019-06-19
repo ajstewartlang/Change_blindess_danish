@@ -7,7 +7,7 @@ library(Hmisc)
 
 data <- read_csv("Mariesdata2.csv")
 
-# tidy and wrangel the data to get it in the correct format
+# tidy and wrangle the data to get it in the correct format
 tidy_data <- data %>% 
   dplyr::select(Participant, Item, type, 
                 Focus, Cleft, YNResp.corr_raw, YNResp.rt_raw, changeResponse.corr_raw) %>%
@@ -101,10 +101,23 @@ model <- glmer(Response ~ Focus * Cleft + (1 | Participant) +
                  (1 | Item), data = tidy_data, family = "binomial")
 summary(model)
 emmeans(model, pairwise ~ Focus, type = "response")
+emmeans(model, pairwise ~ Cleft, type = "response")
 
 # We conducted a further generalised mixed model on the change detection rate 
 # for cases where people spotted a change (regardless of whether they correctly 
-# identified it). The fixed and random effects structures are identical to the 
+# identified it). 
+
+corr_data <- tidy_data 
+model <- glmer(Correct_word ~ Focus * Cleft + (1 | Participant) +
+                 (1 | Item), data = corr_data, family = "binomial")
+summary(model)
+
+emmeans(model, pairwise ~ Focus, type = "response")
+emmeans(model, pairwise ~ Cleft, type = "response")
+
+# The next analyisis is when people correctly spot a word has changed, and also
+# correctly identify what that change was.
+# The fixed and random effects structures are identical to the 
 # previous model. A summary of the model can be seen below. There was a main 
 # effect of Focus, but no effect of Cleft, and no interaction between Focus and 
 # Cleft.
@@ -143,7 +156,7 @@ emmeans(model, pairwise ~ Focus * Cleft, adjust = "bonferroni")
 # people spotted a change regardless of wheether they correctly identified it.  
 # This time the random effects structure included random intercepts for 
 # participants and items, and additive random slopes for our two fixed effects 
-# of Focus and Cleft. This again showed an effect of Focus,  no effect of Cleft 
+# of Focus and Cleft. This again showed an effect of Focus, no effect of Cleft 
 # and an interaction between Focus and Cleft.
 
 # Mixed model on RT data when people spot a change
